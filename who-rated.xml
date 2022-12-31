@@ -1,0 +1,492 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dleplugin>
+	<name>Who rated</name>
+	<description>Плагин ведёт учёт даты изменения рейтинга у новостей и комментариев, и отображению её по запросу на определённый url.</description>
+	<icon></icon>
+	<version>0.2.1</version>
+	<dleversion>15.1</dleversion>
+	<versioncompare>greater</versioncompare>
+	<upgradeurl></upgradeurl>
+	<filedelete>1</filedelete>
+	<needplugin></needplugin>
+	<mnotice>1</mnotice>
+	<mysqlinstall><![CDATA[ALTER TABLE `{prefix}_logs` ADD `date` datetime NOT NULL DEFAULT '1970-01-01 00:00:00';
+ALTER TABLE `{prefix}_comment_rating_log` ADD `date` datetime NOT NULL DEFAULT '1970-01-01 00:00:00';]]></mysqlinstall>
+	<mysqlupgrade><![CDATA[]]></mysqlupgrade>
+	<mysqlenable><![CDATA[]]></mysqlenable>
+	<mysqldisable><![CDATA[]]></mysqldisable>
+	<mysqldelete><![CDATA[ALTER TABLE `{prefix}_logs` DROP `date`;
+ALTER TABLE `{prefix}_comment_rating_log` DROP `date`;]]></mysqldelete>
+	<phpinstall><![CDATA[]]></phpinstall>
+	<phpupgrade><![CDATA[]]></phpupgrade>
+	<phpenable><![CDATA[]]></phpenable>
+	<phpdisable><![CDATA[]]></phpdisable>
+	<phpdelete><![CDATA[]]></phpdelete>
+	<notice><![CDATA[<p>@<a href="https://t.me/TeraMoune" target="_blank">TeraMoune</a></p>
+<details><summary style="color:green;font-weight:500" role="button">[b]Для благодарности[/b]</summary><ul style="margin-bottom: 0;"><li>[b]<span style="color:rgb(127,43,253);">Ю</span>Money[/b]: 4100115063692304</li><li>[b]<span style="color:#FF8C00;">Qiwi</span> nickname[/b]: TERAMOUNE</li><li>[b]<span style="color:#006cb4;">WMZ[/b]</span>: Z990082286464</li></ul></details>
+<p>Другие плагины на <a href="https://github.com/TeraMoune" target="_blank">[b]GitHub[/b]</a></p>]]></notice>
+	<file name="engine/ajax/who_rated.php">
+		<operation action="create">
+			<replacecode><![CDATA[<?php
+if(!defined('DATALIFEENGINE')) {
+	header( "HTTP/1.1 403 Forbidden" );
+	header ( 'Location: ../../' );
+	die( "Hacking attempt!" );
+}
+
+//if( !$is_logged ) die('Not authorized');
+
+if( $_REQUEST['user_hash'] == "" OR $_REQUEST['user_hash'] != $dle_login_hash ) {
+		
+	die ("session error");
+	
+}
+
+$type 			= totranslit( $_POST['type'] );
+$id 			= intval( $_POST['id'] );
+$user_id 		= intval( $_POST['user_id'] );
+$rating_type 	= intval( $_POST['rating_type'] );
+
+if( $rating_type ) {
+  
+	$table 				= "_comment_rating_log";
+	$where 				= "c_id = '{$id}'";
+  	$_cfg_rating_type 	= $config['comments_rating_type'];
+  
+} else {
+  
+	$table 				= "_logs";
+	$where 				= "news_id = '{$id}'";
+  	$_cfg_rating_type 	= $config['rating_type'];
+}
+
+if( $type == 'profile' ) {
+	if( (!$user_id OR $user_id < 1) ) die( "error" );
+} else {	
+	if( (!$id OR $id < 1) ) die( "error" );
+}
+
+if( !$user_id ) {
+
+	if($_POST['page'] > 0) $page = intval($_POST['page']); else $page = 1;
+	if($_POST['jump']) $jump = true; else $jump = false;
+	$gcount = 5;
+	$limit_page = ($page-1) * $gcount;
+
+	$sql_ 			= $db->super_query("SELECT v.*, u.foto, u.user_group, u.user_id FROM `" . PREFIX . "{$table}` v LEFT JOIN `".USERPREFIX."_users` u ON (v.member=u.name) WHERE {$where} ORDER by `date` ASC LIMIT {$limit_page}, {$gcount}", true);
+	$sqlCount 		= $db->super_query("SELECT COUNT(*) AS cnt FROM `".PREFIX."{$table}` WHERE {$where}");
+	$countAll 		= $sqlCount['cnt'] ? $sqlCount['cnt'] : 0;
+	$enpages_count 	= @ceil( $countAll / $gcount );
+
+	if( $countAll ) {
+		
+		$user 	= array();
+		$i 		= 0;
+	  
+		foreach( $sql_ as $row ) {
+	 
+			if ( count(explode("@", $row['foto'])) == 2 ) {
+			  
+				$foto = "https://www.gravatar.com/avatar/" . md5(trim($row['foto'])) . "?s=" . intval($user_group[$row['user_group']]['max_foto']);
+			  
+			} else {
+			
+				if( $row['foto'] ) {
+					
+					if (strpos($row['foto'], "//") === 0) $avatar = "http:".$row['foto']; else $avatar = $row['foto'].'"/></li>';
+
+					$avatar = @parse_url ( $avatar );
+
+					if( $avatar['host'] ) $foto = $row['foto'];
+					else $foto = "{$config['http_home_url']}uploads/fotos/{$row['foto']}";
+
+				} else $foto =  "{THEME}/dleimages/noavatar.png";
+
+			}
+			
+			$rating = '';
+
+			if ( !$_cfg_rating_type ) {
+
+				$rating 	= '<span class="rated-is">' . $row['rating'] . '</span>';
+				$r_class 	= 'ratingLog-listars';
+
+			}
+
+			if ( $_cfg_rating_type == "1" ) {
+
+				$rating 	= '<span class="rated-is"><svg class="icon icon-checkmark" viewBox="0 0 1024 1024"><path class="path1" d="M864 128l-480 480-224-224-160 160 384 384 640-640z"></path></svg></span>';
+				$r_class 	= 'ratingLog-liplus';
+
+			}
+
+			if ( $_cfg_rating_type == "2" OR $_cfg_rating_type == "3") {
+
+				if( $row['rating'] == 1 ) { $rating = '<span class="rated-is"><svg class="icon icon-arrow-up" viewBox="0 0 1024 1024"><path d="M512 32l-480 480h288v512h384v-512h288z"></path></svg></span>'; $r_class = 'ratingLog-liplus'; }
+				elseif( $row['rating'] == -1 ) { $rating = '<span class="rated-is"><svg class="icon icon-arrow-down" viewBox="0 0 1024 1024"><path d="M512 992l480-480h-288v-512h-384v512h-288z"></path></svg></span>'; $r_class = 'ratingLog-liminus'; }
+
+            }		
+			
+			if( $row['member'] != 'noname' ) $params = " onclick=\"profileRateStats({$row['user_id']}, {$rating_type})\" data-user=\"{$row['member']}\" data-id=\"{$row['id']}\"";
+			else $params = "";
+          
+          	//if( $config['image_lazy'] ) $lazy = "data-";
+          	//else $lazy = "";
+         	 $lazy = "";
+			
+			$user[] = "<li class=\"{$r_class}\"{$params}>{$rating}<img {$lazy}src=\"{$foto}\" alt=\"foto\" width=\"22\" height=\"22\">".stripslashes($row['member'])."<span class='rated-date'>{$row['date']}</span></li>";
+			
+			$i++;
+		  
+		}
+		
+		$result = '';
+		
+		if( !$jump ) $result .= '<div id="who-rated"><div class="all-list"><span class="rated-count">Голосов: ' . $countAll . '</span> <span>Страниц: ' . $enpages_count . '</span><div class="rated-content ratingLog">';
+		
+		
+		$result .= '<ul id="rated-list">' . implode($user) . '</ul>';
+		
+		if( $enpages_count > 1 ) {
+			
+			if( $page == 1 ) $llock = ' class="disabled"';
+			else $llock = ' onclick="ratedlist_move('.$id.', '.$rating_type.', \'prev\');"';
+			if( $page == $enpages_count ) $rlock = ' class="disabled"';
+			else $rlock = ' onclick="ratedlist_move('.$id.', '.$rating_type.', \'next\');"';
+			
+			$result .= '<ul id="rated-list-nav"><li '.$llock.'><</li><li '.$rlock.'>></li></ul>';
+			
+		}
+		
+		if( !$jump ) {
+			$result .= '</div></div></div>';
+			
+			if( $enpages_count > 1 ) {
+			
+				$result .= '<script>';
+				$result .= "
+				var page = '{$page}';
+				function ratedlist_move( id, rating_type, movent ) {
+				
+				if( movent ) {
+					jump = 1;
+					
+					if( movent == 'next' ) page++;
+					else if( movent == 'prev' ) page--;
+					
+				} else jump = 0;
+
+				
+				$.post( dle_root + \"engine/ajax/controller.php?mod=who_rated\", {id: id, movent: movent, jump: jump, page: page, rating_type: rating_type, dle_hash}, function(data) {
+						
+					$('#who-rated .rated-content').html(data);
+                    
+                    /*new LazyLoad({
+						elements_selector: \"#rated-list img[data-src]\",
+						threshold: 0,
+						load_delay: 250
+					});*/
+					
+				});		
+
+				}";
+				$result .= '</script>';		
+				
+			}
+		}
+		$result = str_ireplace( '{THEME}', $config['http_home_url'] . 'templates/' . $config['skin'], $result );
+		echo $result;
+	  
+	} else echo 'null';
+
+} else {
+	
+  		$tpl = new dle_template();
+  
+		if( $rating_type ) $sql_ = $db->super_query("SELECT v.*, u.foto, u.user_group, u.user_id, r.id as news_id, r.title, r.category, r.alt_name, r.date as news_date FROM `" . PREFIX . "_comment_rating_log` v LEFT JOIN `".USERPREFIX."_users` u ON (v.member=u.name) LEFT JOIN `".PREFIX."_comments` p ON (p.id=v.c_id) LEFT JOIN `".PREFIX."_post` r ON (r.id=p.post_id) WHERE u.user_id = '{$user_id}' ORDER by `date` ASC LIMIT 100", true);
+		else $sql_ = $db->super_query("SELECT v.*, u.foto, u.user_group, u.user_id, p.title, p.category, p.alt_name, p.date as news_date FROM `" . PREFIX . "_logs` v LEFT JOIN `".USERPREFIX."_users` u ON (v.member=u.name) LEFT JOIN `".PREFIX."_post` p ON (p.id=v.news_id) WHERE user_id = '{$user_id}' ORDER by `date` ASC LIMIT 100", true);
+		
+		if( !$_cfg_rating_type ) {
+			
+			$q = "(SELECT count(*) FROM `".PREFIX."{$table}` WHERE member = '".$db->safesql($sql_[0]['member'])."' AND rating = '1') as r1, (SELECT count(*) FROM `".PREFIX."{$table}` WHERE member = '".$db->safesql($sql_[0]['member'])."' AND rating = '2') as r2, (SELECT count(*) FROM `".PREFIX."{$table}` WHERE member = '".$db->safesql($sql_[0]['member'])."' AND rating = '3') as r3, (SELECT count(*) FROM `".PREFIX."{$table}` WHERE member = '".$db->safesql($sql_[0]['member'])."' AND rating = '4') as r4, (SELECT count(*) FROM `".PREFIX."{$table}` WHERE member = '".$db->safesql($sql_[0]['member'])."' AND rating = '5') as r5";
+			
+		}else {
+			
+			$q = "(SELECT count(*) FROM `".PREFIX."{$table}` WHERE member = '".$db->safesql($sql_[0]['member'])."' AND rating = '1') as rating_plus, (SELECT count(*) FROM `".PREFIX."{$table}` WHERE member = '".$db->safesql($sql_[0]['member'])."' AND rating = '-1') as rating_minus";
+		}
+		
+		
+		$all_rate = $db->super_query("SELECT {$q} FROM `".PREFIX."_logs`");
+
+		if ( count(explode("@", $sql_[0]['foto'])) == 2 ) {
+			  
+			$foto = "https://www.gravatar.com/avatar/" . md5(trim($sql_[0]['foto'])) . "?s=" . intval($user_group[$sql_[0]['user_group']]['max_foto']);
+			  
+		} else {
+			
+			if( $sql_[0]['foto'] ) {
+					
+				if (strpos($sql_[0]['foto'], "//") === 0) $avatar = "http:".$sql_[0]['foto']; else $avatar = $sql_[0]['foto'].'"/></li>';
+
+				$avatar = @parse_url ( $avatar );
+
+				if( $avatar['host'] ) $foto = $sql_[0]['foto'];
+				else $foto = "{$config['http_home_url']}uploads/fotos/{$sql_[0]['foto']}";
+
+			} else $foto =  "{THEME}/dleimages/noavatar.png";
+
+		}
+		
+		$list = array();
+		
+		foreach( $sql_ as $row ) {
+	 
+			$rating = '';
+			
+			if ( !$_cfg_rating_type ) {
+				$rating = '<span class="rated-is">' . $row['rating'] . '</span>';
+				$r_class = 'ratingLog-listars';
+			}
+			
+			if ( $_cfg_rating_type == "1" ) {
+				$rating = '<span class="rated-is"><svg class="icon icon-checkmark" viewBox="0 0 1024 1024"><path class="path1" d="M864 128l-480 480-224-224-160 160 384 384 640-640z"></path></svg></span>';
+				$r_class = 'ratingLog-liplus';
+			}
+			
+			if ( $_cfg_rating_type == "2" OR $_cfg_rating_type == "3") {
+				if( $row['rating'] == 1 ) { $rating = '<span class="rated-is"><svg class="icon icon-arrow-up" viewBox="0 0 1024 1024"><path d="M512 32l-480 480h288v512h384v-512h288z"></path></svg></span>'; $r_class = 'ratingLog-liplus'; }
+				elseif( $row['rating'] == -1 ) { $rating = '<span class="rated-is"><svg class="icon icon-arrow-down" viewBox="0 0 1024 1024"><path d="M512 992l480-480h-288v-512h-384v512h-288z"></path></svg></span>'; $r_class = 'ratingLog-liminus'; }
+			}
+          
+            if( $config['allow_alt_url'] ) {
+
+                if( $config['seo_type'] == 1 OR $config['seo_type'] == 2  ) {
+
+                    if( $row['category'] and $config['seo_type'] == 2 ) {
+
+                        $full_link = $config['http_home_url'] . get_url( $row['category'] ) . "/" . $row['news_id'] . "-" . $row['alt_name'] . ".html";
+
+                    } else {
+
+                        $full_link = $config['http_home_url'] . $row['news_id'] . "-" . $row['alt_name'] . ".html";
+
+                    }
+
+                } else {
+
+                    $full_link = $config['http_home_url'] . date( 'Y/m/d/', $row['news_date'] ) . $row['alt_name'] . ".html";
+                }
+
+            } else {
+
+                $full_link = $config['http_home_url'] . "index.php?newsid=" . $row['news_id'];
+
+            }
+			
+			if( $rating_type ) $full_link .= "#comment-id-{$row['c_id']}";
+			
+			$list[] = "<li class=\"{$r_class}\">{$rating}<a href=\"{$full_link}\">".stripslashes($row['title'])."</a><span class=\"rated-date\">{$row['date']}</span></li>";
+			
+			$i++;
+		  
+		}
+		
+		if( !$config['rating_type'] ) {
+			
+			$rate_type = "поставил: <div class=\"stars-block\"><span class=\"\">1</span><span>x</span><span>{$all_rate['r1']}</span></div><div class=\"stars-block\"><span class=\"\">2</span><span>x</span><span>{$all_rate['r2']}</span></div><div class=\"stars-block\"><span class=\"\">3</span><span>x</span><span>{$all_rate['r3']}</span></div><div class=\"stars-block\"><span class=\"\">4</span><span>x</span><span>{$all_rate['r4']}</span></div><div class=\"stars-block\"><span class=\"\">5</span><span>x</span><span>{$all_rate['r5']}</span></div>";
+			
+		} else {
+          
+			$gram_plus = $tpl->declination(array(
+				1 => $all_rate['rating_plus'],
+				2 => 'плюс|а|ов'
+			));
+			
+			$gram_minus = $tpl->declination(array(
+				1 => $all_rate['rating_minus'],
+				2 => 'минус|а|ов'
+			));          
+			
+			$rate_type = "поставил: <span class=\"rated-is-plus\"><svg class=\"icon icon-arrow-up\" viewBox=\"0 0 1024 1024\"><path d=\"M512 32l-480 480h288v512h384v-512h288z\"></path></svg></span> {$all_rate['rating_plus']} " . $gram_plus . " <span class=\"rated-is-minus\"><svg class=\"icon icon-arrow-down\" viewBox=\"0 0 1024 1024\"><path d=\"M512 992l480-480h-288v-512h-384v512h-288z\"></path></svg></span> {$all_rate['rating_minus']} " . $gram_minus;
+		
+		}
+		
+		if( count($list) ) $list = "<ul>".implode($list)."</ul>";
+		else $list = "<span class=\"no_row\"> Оценок не выставлял </span>";
+
+       	/*if( $config['image_lazy'] ) $lazy = "data-";
+       	else $lazy = "";*/
+  		$lazy = "";
+  
+		$result = "<div id=\"rate-profile-stats\" class=\"rate-profile-stats ratingLog\">
+		<div class=\"ratingLog-userbox-user\">
+		<img {$lazy}src=\"{$foto}\" alt=\"foto\" height=\"60\" width=\"60\"/>
+		<a onclick=\"ShowProfile('{$sql_[0]['member']}', '{$config['http_home_url']}user/{$sql_[0]['member']}/', '0'); return false;\" href=\"{$config['http_home_url']}user/{$sql_[0]['member']}/\">{$sql_[0]['member']}</a>
+		<div class=\"ratingLog-userbox-stats\">{$rate_type}</div>
+		<span class=\"ratingLog-userbox-close\" onclick=\"$('#rate-profile-stats').remove(); $('#who-rated .all-list').show();\" title=\"Закрыть профиль\">X</span>
+		</div>
+		{$list}
+		</div>";		
+		
+		$result = str_ireplace( '{THEME}', $config['http_home_url'] . 'templates/' . $config['skin'], $result );
+		echo $result;		
+	
+}
+
+die();
+?>]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+	</file>
+	<file name="engine/modules/functions.php">
+		<operation action="replace">
+			<searchcode><![CDATA[id=\"ratig-layer-{$id}\"]]></searchcode>
+			<replacecode><![CDATA[id=\"ratig-layer-{$id}\" data-newsid=\"{$id}\" onclick=\"who_rated_list(this);\"]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+		<operation action="replace">
+			<searchcode><![CDATA[id=\"comments-ratig-layer-{$id}\"]]></searchcode>
+			<replacecode><![CDATA[id=\"comments-ratig-layer-{$id}\" data-commid=\"{$id}\" onclick=\"who_rated_list(this, 1);\"]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+		<operation action="replace">
+			<searchcode><![CDATA[else $rated = "<span class=\"ratingtypeplusminus {$extraclass}\" >{$rating}</span>";]]></searchcode>
+			<replacecode><![CDATA[else $rated = "<span id=\"ratig-layer-{$id}\" data-newsid=\"{$id}\" onclick=\"who_rated_list(this);\" class=\"ratingtypeplusminus {$extraclass}\" >{$rating}</span>";]]></replacecode>
+			<searchcount>1</searchcount>
+			<replacecount>1</replacecount>
+			<enabled>1</enabled>
+		</operation>
+		<operation action="replace">
+			<searchcode><![CDATA[else $rated = "<span class=\"ratingtypeplus\" >{$rating}</span>";]]></searchcode>
+			<replacecode><![CDATA[else $rated = "<span id=\"ratig-layer-{$id}\" data-newsid=\"{$id}\" onclick=\"who_rated_list(this);\" class=\"ratingtypeplus\" >{$rating}</span>";]]></replacecode>
+			<searchcount>1</searchcount>
+			<replacecount>1</replacecount>
+			<enabled>1</enabled>
+		</operation>
+		<operation action="replace">
+			<searchcode><![CDATA[			$rated = <<<HTML
+<div class="rating">]]></searchcode>
+			<replacecode><![CDATA[			$rated = <<<HTML
+<div id="ratig-layer-{$id}" data-newsid="{$id}" onclick="who_rated_list(this);" class="rating">]]></replacecode>
+			<searchcount>1</searchcount>
+			<replacecount>1</replacecount>
+			<enabled>1</enabled>
+		</operation>
+		<operation action="replace">
+			<searchcode><![CDATA[<div id='comments-ratig-layer-{$id}'><div class="rating">]]></searchcode>
+			<replacecode><![CDATA[<div data-commid="{$id}" onclick="who_rated_list(this, 1);" id='comments-ratig-layer-{$id}'><div class="rating">]]></replacecode>
+			<enabled>0</enabled>
+		</operation>
+		<operation action="replace">
+			<searchcode><![CDATA[			$rated = <<<HTML
+<div class="rating">]]></searchcode>
+			<replacecode><![CDATA[			$rated = <<<HTML
+<div id="comments-ratig-layer-{$id}" data-commid="{$id}" onclick="who_rated_list(this, 1);" class="rating">]]></replacecode>
+			<searchcount>1</searchcount>
+			<replacecount>2</replacecount>
+			<enabled>0</enabled>
+		</operation>
+		<operation action="replace">
+			<searchcode><![CDATA[else $rated = "<span class=\"ratingtypeplus\" >{$rating}</span>";]]></searchcode>
+			<replacecode><![CDATA[else $rated = "<span id=\"comments-ratig-layer-{$id}\" data-commid=\"{$id}\" onclick=\"who_rated_list(this, 1);\" class=\"ratingtypeplus\" >{$rating}</span>";]]></replacecode>
+			<searchcount>1</searchcount>
+			<replacecount>1</replacecount>
+			<enabled>0</enabled>
+		</operation>
+		<operation action="replace">
+			<searchcode><![CDATA[else $rated = "<span class=\"ratingtypeplusminus {$extraclass}\" >{$rating}</span>";]]></searchcode>
+			<replacecode><![CDATA[else $rated = "<span id=\"comments-ratig-layer-{$id}\" data-commid=\"{$id}\" onclick=\"who_rated_list(this, 1);\" class=\"ratingtypeplusminus {$extraclass}\" >{$rating}</span>";]]></replacecode>
+			<searchcount>1</searchcount>
+			<replacecount>1</replacecount>
+			<enabled>0</enabled>
+		</operation>
+	</file>
+	<file name="engine/ajax/rating.php">
+		<operation action="replace">
+			<searchcode><![CDATA[$db->query( "INSERT INTO " . PREFIX . "_logs (news_id, ip, `member`, rating) values ('{$news_id}', '{$_IP}', '{$user_name}', '{$go_rate}')" );]]></searchcode>
+			<replacecode><![CDATA[$db->query( "INSERT INTO " . PREFIX . "_logs (news_id, ip, member, rating, date) values ('{$news_id}', '{$_IP}', '{$user_name}', '{$go_rate}', '{$thistime}')" );]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+		<operation action="replace">
+			<searchcode><![CDATA[$db->query( "UPDATE " . PREFIX . "_logs SET rating='{$go_rate}' WHERE news_id ='{$news_id}' AND {$where}" );]]></searchcode>
+			<replacecode><![CDATA[$db->query( "UPDATE " . PREFIX . "_logs SET rating='{$go_rate}', date = '{$thistime}' WHERE news_id ='{$news_id}' AND {$where}" );]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+		<operation action="after">
+			<searchcode><![CDATA[else $where = "ip ='{$_IP}'";]]></searchcode>
+			<replacecode><![CDATA[$added_time = time();
+$thistime = date( "Y-m-d H:i:s", $added_time );
+
+/*$check = $db->super_query("SELECT count(*) as flood, ip FROM " . PREFIX . "_logs WHERE news_id ='{$news_id}' AND {$where} AND date >= '{$thistime}' - INTERVAL 10 SECOND AND date < '{$thisdate}");
+
+if( $check AND $check['flood'] > 3 ) {
+  
+  
+   die('flood');
+}*/]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+	</file>
+	<file name="engine/modules/addcomments.php">
+		<operation action="after">
+			<searchcode><![CDATA[$added_comments_id = $db->insert_id();]]></searchcode>
+			<replacecode><![CDATA[$rating_date = true;]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+	</file>
+	<file name="engine/modules/show.short.php">
+		<operation action="before">
+			<searchcode><![CDATA[$tpl->set( '{rating}', ShowRating( $row['id'], $row['rating'], $row['vote_num'], 1 ) );]]></searchcode>
+			<replacecode><![CDATA[$tpl->set( '{rating_2}', ($row['vote_num'] ? round( ($row['rating'] / $row['vote_num']), 2 ) : 0) );]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+	</file>
+	<file name="engine/modules/show.full.php">
+		<operation action="before">
+			<searchcode><![CDATA[$tpl->set( '{rating}', ShowRating( $row['id'], $row['rating'], $row['vote_num'], $user_group[$member_id['user_group']]['allow_rating'] ) );]]></searchcode>
+			<replacecode><![CDATA[$tpl->set( '{rating_2}', ($row['vote_num'] ? round( ($row['rating'] / $row['vote_num']), 2 ) : 0) );]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+	</file>
+	<file name="engine/ajax/ratingcomments.php">
+		<operation action="replace">
+			<searchcode><![CDATA[$db->query( "INSERT INTO " . PREFIX . "_comment_rating_log (`c_id`, `ip`, `member`, `rating`) values ('{$c_id}', '{$_IP}', '{$user_name}', '{$go_rate}')" );]]></searchcode>
+			<replacecode><![CDATA[$added_time = time();
+$thistime = date( "Y-m-d H:i:s", $added_time );
+$db->query( "INSERT INTO " . PREFIX . "_comment_rating_log (c_id, ip, member, rating, date) values ('{$c_id}', '{$_IP}', '{$user_name}', '{$go_rate}', '$thistime')" );]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+		<operation action="replace">
+			<searchcode><![CDATA[$db->query( "UPDATE " . PREFIX . "_comment_rating_log SET rating='{$go_rate}' WHERE c_id ='{$c_id}' AND {$where}" );]]></searchcode>
+			<replacecode><![CDATA[$added_time = time();
+$thistime = date( "Y-m-d H:i:s", $added_time );
+$db->query( "UPDATE " . PREFIX . "_comment_rating_log SET rating='{$go_rate}', date = '{$thistime}' WHERE c_id ='{$c_id}' AND {$where}" );]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+	</file>
+	<file name="engine/ajax/editcomments.php">
+		<operation action="after">
+			<searchcode><![CDATA[if( !$row['id'] ) die( "error" );]]></searchcode>
+			<replacecode><![CDATA[$rating_date = true;]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+	</file>
+	<file name="engine/inc/editusers.php">
+		<operation action="before">
+			<searchcode><![CDATA[$db->query( "DELETE FROM " . PREFIX . "_comment_rating_log WHERE `member` = '{$row['name']}'" );]]></searchcode>
+			<replacecode><![CDATA[$row_comm_rating = $db->super_query( "SELECT c_id, rating FROM " . USERPREFIX . "_comment_rating_log WHERE member = '{$row['name']}'", true );
+
+if( $row_comm_rating ) {
+  
+  foreach( $row_comm_rating as $c_row ) {
+    if( $c_row['rating'] == -1 )
+    	$db->query( "UPDATE " . PREFIX . "_comments SET rating=rating+1 WHERE id='{$c_id}'" );
+    else
+      	$db->query( "UPDATE " . PREFIX . "_comments SET rating=rating-1 WHERE id='{$c_id}'" );
+  }
+  
+}]]></replacecode>
+			<enabled>1</enabled>
+		</operation>
+	</file>
+</dleplugin>
