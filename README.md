@@ -242,9 +242,9 @@ function who_rated_list(obj, rating_type) {
 
 Пример для шаблона комментария:
 ```html
-		[rating]
-		<div class="rate">
-			[rating-type-1]<div class="rate_stars"><span data-commid="{id}" onclick="who_rated_list(this, 1);">[?]</span>{rating}</div>[/rating-type-1]
-		</div>
-		[/rating]      
+[rating]
+<div class="rate">
+	[rating-type-1]<div class="rate_stars"><span data-commid="{id}" onclick="who_rated_list(this, 1);">[?]</span>{rating}</div>[/rating-type-1]
+</div>
+[/rating]      
 ```
