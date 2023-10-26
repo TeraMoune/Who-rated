@@ -23,7 +23,7 @@ ALTER TABLE `{prefix}_comment_rating_log` DROP `date`;]]></mysqldelete>
 	<phpdisable><![CDATA[]]></phpdisable>
 	<phpdelete><![CDATA[]]></phpdelete>
 	<notice><![CDATA[<p>@<a href="https://t.me/TeraMoune" target="_blank">TeraMoune</a></p>
-<details><summary style="color:green;font-weight:500" role="button">[b]Для благодарности[/b]</summary><ul style="margin-bottom: 0;"><li>[b]<span style="color:rgb(127,43,253);">Ю</span>Money[/b]: 4100115063692304</li><li>[b]<span style="color:#FF8C00;">Qiwi</span> nickname[/b]: TERAMOUNE</li></ul></details>
+<details><summary style="color:green;font-weight:500" role="button">[b]Для благодарности[/b]</summary><ul style="margin-bottom: 0;"><li>[b]<span style="color:rgb(127,43,253);">Ю</span>Money[/b]: 4100115063692304</li><li>[b]<span style="color:#FF8C00;">Qiwi</span> nickname[/b]: TERAMOUNE</li><li>[b]<span style="color:#006cb4;">WMZ[/b]</span>: Z990082286464</li></ul></details>
 <p>Другие плагины на <a href="https://github.com/TeraMoune" target="_blank">[b]GitHub[/b]</a></p>]]></notice>
 	<file name="engine/ajax/who_rated.php">
 		<operation action="create">
@@ -343,11 +343,15 @@ die();
 			<searchcode><![CDATA[id=\"ratig-layer-{$id}\"]]></searchcode>
 			<replacecode><![CDATA[id=\"ratig-layer-{$id}\" data-newsid=\"{$id}\" onclick=\"who_rated_list(this);\"]]></replacecode>
 			<enabled>1</enabled>
+			<dleversion>17</dleversion>
+			<versioncompare>less</versioncompare>
 		</operation>
 		<operation action="replace">
 			<searchcode><![CDATA[id=\"comments-ratig-layer-{$id}\"]]></searchcode>
 			<replacecode><![CDATA[id=\"comments-ratig-layer-{$id}\" data-commid=\"{$id}\" onclick=\"who_rated_list(this, 1);\"]]></replacecode>
 			<enabled>1</enabled>
+			<dleversion>17</dleversion>
+			<versioncompare>less</versioncompare>
 		</operation>
 		<operation action="replace">
 			<searchcode><![CDATA[else $rated = "<span class=\"ratingtypeplusminus {$extraclass}\" >{$rating}</span>";]]></searchcode>
@@ -399,6 +403,18 @@ die();
 			<searchcount>1</searchcount>
 			<replacecount>1</replacecount>
 			<enabled>0</enabled>
+		</operation>
+		<operation action="replace">
+			<searchcode><![CDATA[data-ratig-layer-id='{$id}']]></searchcode>
+			<replacecode><![CDATA[data-ratig-layer-id='{$id}' data-newsid='{$id}' onclick='who_rated_list(this);']]></replacecode>
+			<enabled>1</enabled>
+			<dleversion>17</dleversion>
+			<versioncompare>greater</versioncompare>
+		</operation>
+		<operation action="replace">
+			<searchcode><![CDATA[data-comments-ratig-layer-id='{$id}']]></searchcode>
+			<replacecode><![CDATA[data-comments-ratig-layer-id='{$id}' data-commid='{$id}' onclick='who_rated_list(this, 1);']]></replacecode>
+			<enabled>1</enabled>
 		</operation>
 	</file>
 	<file name="engine/ajax/rating.php">
@@ -469,6 +485,15 @@ $db->query( "UPDATE " . PREFIX . "_comment_rating_log SET rating='{$go_rate}', d
 			<searchcode><![CDATA[if( !$row['id'] ) die( "error" );]]></searchcode>
 			<replacecode><![CDATA[$rating_date = true;]]></replacecode>
 			<enabled>1</enabled>
+			<dleversion>17</dleversion>
+			<versioncompare>less</versioncompare>
+		</operation>
+		<operation action="after">
+			<searchcode><![CDATA[if (!$row['id']) die("error");]]></searchcode>
+			<replacecode><![CDATA[$rating_date = true;]]></replacecode>
+			<enabled>1</enabled>
+			<dleversion>17</dleversion>
+			<versioncompare>greater</versioncompare>
 		</operation>
 	</file>
 	<file name="engine/inc/editusers.php">
@@ -487,6 +512,28 @@ if( $row_comm_rating ) {
   
 }]]></replacecode>
 			<enabled>1</enabled>
+			<dleversion>17</dleversion>
+			<versioncompare>less</versioncompare>
+		</operation>
+	</file>
+	<file name="engine/inc/include/functions.inc.php">
+		<operation action="after">
+			<searchcode><![CDATA[$db->query("DELETE FROM " . PREFIX . "_comment_rating_log WHERE `member` = '{$row['name']}'");]]></searchcode>
+			<replacecode><![CDATA[$row_comm_rating = $db->super_query( "SELECT c_id, rating FROM " . USERPREFIX . "_comment_rating_log WHERE member = '{$row['name']}'", true );
+
+if( $row_comm_rating ) {
+  
+  foreach( $row_comm_rating as $c_row ) {
+    if( $c_row['rating'] == -1 )
+    	$db->query( "UPDATE " . PREFIX . "_comments SET rating=rating+1 WHERE id='{$c_id}'" );
+    else
+      	$db->query( "UPDATE " . PREFIX . "_comments SET rating=rating-1 WHERE id='{$c_id}'" );
+  }
+  
+}]]></replacecode>
+			<enabled>1</enabled>
+			<dleversion>17</dleversion>
+			<versioncompare>greater</versioncompare>
 		</operation>
 	</file>
 </dleplugin>
