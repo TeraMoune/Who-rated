@@ -3,7 +3,7 @@
 	<name>Who rated</name>
 	<description>Плагин ведёт учёт даты изменения рейтинга у новостей и комментариев, и отображению её по запросу на определённый url.</description>
 	<icon></icon>
-	<version>0.2.1</version>
+	<version>0.2.2</version>
 	<dleversion>15.1</dleversion>
 	<versioncompare>greater</versioncompare>
 	<upgradeurl></upgradeurl>
